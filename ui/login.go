@@ -27,13 +27,13 @@ func NewLoginPage(window fyne.Window, loginCallback func(username, password stri
 func (l *LoginPage) Load() fyne.CanvasObject {
 	// Logo
 	logo := canvas.NewImageFromFile("assets/logo.svg")
-	logo.SetMinSize(fyne.NewSize(200, 60))
+	logo.SetMinSize(fyne.NewSize(300, 90)) // Increased from 200x60 to 300x90
 	logo.FillMode = canvas.ImageFillOriginal
-	logo.Resize(fyne.NewSize(200, 60))
+	logo.Resize(fyne.NewSize(300, 90))     // Increased from 200x60 to 300x90
 
 	// Create a card-like container for the login form
 	formCard := canvas.NewRectangle(theme.BackgroundColor())
-	formCard.SetMinSize(fyne.NewSize(300, 400))
+	formCard.SetMinSize(fyne.NewSize(400, 500)) // Increased width to accommodate larger logo
 	
 	// Welcome text
 	welcomeText := canvas.NewText("Welcome back!", theme.ForegroundColor())
@@ -72,10 +72,12 @@ func (l *LoginPage) Load() fyne.CanvasObject {
 	loginBtn.Importance = widget.HighImportance
 	loginBtn.Resize(fyne.NewSize(200, 40))
 
-	// Create a styled container for the form
+	// Create a styled container for the form with more spacing
 	formContainer := container.NewVBox(
+		widget.NewLabel(""), // Extra spacing
+		widget.NewLabel(""), // Extra spacing
 		container.NewCenter(logo),
-		widget.NewLabel(""), // Spacing
+		widget.NewLabel(""), // Extra spacing
 		container.NewCenter(welcomeText),
 		widget.NewLabel(""), // Spacing
 		l.username,
