@@ -1,6 +1,7 @@
 package db
 
 import (
+	"database/sql"
 	"fmt"
 
 	"github.com/golang-migrate/migrate/v4"
@@ -22,7 +23,32 @@ func RunMigrations(config *config.DBConfig) error {
 		config.DBName,
 	)
 
-	fmt.Println("Connecting to database...")
+	// First reset the database schema
+	db, err := sql.Open("postgres", migrationURL)
+	if err != nil {
+		return fmt.Errorf("failed to open db connection: %v", err)
+	}
+	defer db.Close()
+
+	fmt.Println("Cleaning existing schema...")
+	_, err = db.Exec(`
+		DROP SCHEMA public CASCADE;
+		CREATE SCHEMA public;
+		GRANT ALL ON SCHEMA public TO cashier_user;
+		GRANT ALL ON SCHEMA public TO public;
+
+		CREATE TABLE IF NOT EXISTS schema_migrations (
+			version bigint NOT NULL,
+			dirty boolean NOT NULL,
+			CONSTRAINT schema_migrations_pkey PRIMARY KEY (version)
+		);
+	`)
+	if err != nil {
+		return fmt.Errorf("failed to reset schema: %v", err)
+	}
+
+	// Now create a new migration instance
+	fmt.Println("Initializing migration...")
 	m, err := migrate.New(
 		"file://db/migrations",
 		migrationURL,
@@ -32,30 +58,23 @@ func RunMigrations(config *config.DBConfig) error {
 	}
 	defer m.Close()
 
-	// Get current version before migration
-	version, dirty, err := m.Version()
-	if err != nil && err != migrate.ErrNilVersion {
-		return fmt.Errorf("failed to get current version: %v", err)
-	}
-	fmt.Printf("Current migration version: %d, Dirty: %v\n", version, dirty)
-
 	// Run migrations
 	fmt.Println("Applying migrations...")
 	if err := m.Up(); err != nil && err != migrate.ErrNoChange {
 		return fmt.Errorf("failed to run migrations: %v", err)
 	}
 
-	// Get new version after migration
-	newVersion, dirty, err := m.Version()
+	// Get current version after migration
+	version, dirty, err := m.Version()
 	if err != nil && err != migrate.ErrNilVersion {
-		return fmt.Errorf("failed to get new version: %v", err)
+		return fmt.Errorf("failed to get current version: %v", err)
 	}
-	fmt.Printf("New migration version: %d, Dirty: %v\n", newVersion, dirty)
+	fmt.Printf("Current migration version: %d, Dirty: %v\n", version, dirty)
 
 	if err == migrate.ErrNoChange {
 		fmt.Println("No migration needed - database is up to date")
 	} else {
-		fmt.Printf("Successfully migrated from version %d to %d\n", version, newVersion)
+		fmt.Println("Successfully migrated database")
 	}
 
 	return nil

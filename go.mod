@@ -7,6 +7,7 @@ require fyne.io/fyne/v2 v2.6.0
 require (
 	github.com/golang-migrate/migrate/v4 v4.18.2
 	github.com/joho/godotenv v1.5.1
+	github.com/sdassow/fyne-datepicker v0.0.0-20250403132905-bf906d02ba0c
 )
 
 require (

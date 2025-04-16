@@ -1,169 +1,129 @@
 package ui
 
 import (
-    "database/sql"
-    "fmt"
-    "log"
+	"database/sql"
+	"log"
 
-    "fyne.io/fyne/v2"
-    "fyne.io/fyne/v2/container"
-    "fyne.io/fyne/v2/widget"
-    "github.com/hendrisulistya/cashier-app/db"
-    "github.com/hendrisulistya/cashier-app/types"
+	"fyne.io/fyne/v2"
+	"fyne.io/fyne/v2/canvas"
+	"fyne.io/fyne/v2/container"
+	"fyne.io/fyne/v2/dialog"
+	"fyne.io/fyne/v2/layout"
+	"fyne.io/fyne/v2/theme"
+	"fyne.io/fyne/v2/widget"
 )
 
 type MainWindow struct {
-    window    fyne.Window
-    database  *sql.DB
-    cartItems []types.CartItem
+	window   fyne.Window
+	database *sql.DB
 }
 
 func NewMainWindow(window fyne.Window, database *sql.DB) *MainWindow {
-    return &MainWindow{
-        window:    window,
-        database:  database,
-        cartItems: make([]types.CartItem, 0),
-    }
+	return &MainWindow{
+		window:   window,
+		database: database,
+	}
 }
 
 func (m *MainWindow) Load() error {
-    products, err := db.GetProducts(m.database)
-    if err != nil {
-        return fmt.Errorf("could not fetch products: %v", err)
-    }
-
-    content := m.createMainContent(products)
-    m.window.SetContent(content)
-    return nil
+	content := m.createMainMenu()
+	m.window.SetContent(content)
+	return nil
 }
 
-func (m *MainWindow) createMainContent(products []types.Product) fyne.CanvasObject {
-    // Create UI components
-    header := widget.NewLabel("Cashier System")
-    header.TextStyle = fyne.TextStyle{Bold: true}
+func (m *MainWindow) createMainMenu() fyne.CanvasObject {
+	// Create header with logo
+	logo := canvas.NewImageFromFile("assets/logo.svg")
+	logo.SetMinSize(fyne.NewSize(200, 60))
+	logo.FillMode = canvas.ImageFillOriginal
 
-    // Cart display
-    cartDisplay := widget.NewMultiLineEntry()
-    cartDisplay.Disable()
-    totalLabel := widget.NewLabel("Total: Rp0.00")
+	header := container.NewCenter(
+		container.NewVBox(
+			logo,
+			widget.NewLabelWithStyle("Point of Sale System", fyne.TextAlignCenter, fyne.TextStyle{Bold: true}),
+		),
+	)
 
-    updateCart := func() {
-        var total float64
-        cartText := ""
-        for _, item := range m.cartItems {
-            subtotal := item.Product.Price * float64(item.Quantity)
-            cartText += fmt.Sprintf("%s x%d: Rp%.2f\n",
-                item.Product.Name, item.Quantity, subtotal)
-            total += subtotal
-        }
-        cartDisplay.SetText(cartText)
-        totalLabel.SetText(fmt.Sprintf("Total: Rp%.2f", total))
-    }
+	// Create menu grid with modern styling
+	menuGrid := container.NewGridWithColumns(2,
+		createMenuButton("Cashier", theme.ListIcon(), func() {
+			cashierWindow := NewCashierWindow(m.window, m.database)
+			if err := cashierWindow.Load(); err != nil {
+				log.Printf("Error loading cashier window: %v", err)
+			}
+		}),
 
-    // Product list
-    productList := container.NewVBox()
-    for _, product := range products {
-        prod := product // Create a new variable to avoid closure issues
-        button := widget.NewButton(
-            fmt.Sprintf("%s - Rp%.2f (Stock: %d)", prod.Name, prod.Price, prod.Stock),
-            func() {
-                // Check stock before adding
-                currentQty := 0
-                for _, item := range m.cartItems {
-                    if item.Product.Name == prod.Name {
-                        currentQty = item.Quantity
-                        break
-                    }
-                }
+		createMenuButton("Inventory", theme.ListIcon(), func() {
+			inventoryWindow := NewInventoryWindow(m.window, m.database)
+			if err := inventoryWindow.Load(); err != nil {
+				log.Printf("Error loading inventory window: %v", err)
+				dialog.ShowError(err, m.window)
+			}
+		}),
 
-                if currentQty >= prod.Stock {
-                    dialog := widget.NewLabel(fmt.Sprintf("Not enough stock for %s", prod.Name))
-                    popup := widget.NewModalPopUp(dialog, m.window.Canvas())
-                    popup.Show()
-                    return
-                }
+		createMenuButton("Reports", theme.DocumentIcon(), func() {
+			reportsWindow := NewReportWindow(m.window, m.database)
+			if err := reportsWindow.Load(); err != nil {
+				log.Printf("Error loading reports window: %v", err)
+				dialog.ShowError(err, m.window)
+			}
+		}),
 
-                // Add item to cart
-                found := false
-                for i, item := range m.cartItems {
-                    if item.Product.Name == prod.Name {
-                        m.cartItems[i].Quantity++
-                        found = true
-                        break
-                    }
-                }
-                if !found {
-                    m.cartItems = append(m.cartItems, types.CartItem{
-                        Product:  prod,
-                        Quantity: 1,
-                    })
-                }
-                updateCart()
-            },
-        )
-        productList.Add(button)
-    }
+		createMenuButton("Settings", theme.SettingsIcon(), func() {
+			settingsWindow := NewSettingsWindow(m.window, m.database)
+			if err := settingsWindow.Load(); err != nil {
+				log.Printf("Error loading settings window: %v", err)
+				dialog.ShowError(err, m.window)
+			}
+		}),
+	)
 
-    // Cart buttons
-    clearButton := widget.NewButton("Clear Cart", func() {
-        m.cartItems = []types.CartItem{}
-        updateCart()
-    })
+	// Create logout button with different style
+	logoutButton := widget.NewButtonWithIcon("Logout", theme.LogoutIcon(), func() {
+		loginPage := NewLoginPage(m.window, func(username, password string) bool {
+			if username == "admin" && password == "admin" {
+				mainWindow := NewMainWindow(m.window, m.database)
+				if err := mainWindow.Load(); err != nil {
+					log.Printf("Error loading main window: %v", err)
+					return false
+				}
+				return true
+			}
+			return false
+		})
+		m.window.SetContent(loginPage.Load())
+	})
+	logoutButton.Importance = widget.DangerImportance
 
-    checkoutButton := widget.NewButton("Checkout", func() {
-        if len(m.cartItems) == 0 {
-            return
-        }
+	// Helper function to create styled menu buttons
+	footer := container.NewHBox(
+		widget.NewLabel("© 2024 Cashier App"),
+		layout.NewSpacer(),
+		logoutButton,
+	)
 
-        err := db.SaveSale(m.database, m.cartItems)
-        if err != nil {
-            dialog := widget.NewLabel(fmt.Sprintf("Error processing sale: %v", err))
-            popup := widget.NewModalPopUp(dialog, m.window.Canvas())
-            popup.Show()
-            return
-        }
+	// Main layout with padding and spacing
+	content := container.NewBorder(
+		header,
+		footer,
+		nil,
+		nil,
+		container.NewPadded(
+			container.NewVBox(
+				layout.NewSpacer(),
+				menuGrid,
+				layout.NewSpacer(),
+			),
+		),
+	)
 
-        m.cartItems = []types.CartItem{}
-        updateCart()
+	return content
+}
 
-        // Refresh product list with updated stock
-        products, err := db.GetProducts(m.database)
-        if err != nil {
-            log.Printf("Could not refresh products: %v", err)
-            return
-        }
-        productList.Objects = nil
-        for _, prod := range products {
-            p := prod
-            button := widget.NewButton(
-                fmt.Sprintf("%s - Rp%.2f (Stock: %d)", p.Name, p.Price, p.Stock),
-                func() {
-                    // ... (same button logic as above)
-                },
-            )
-            productList.Add(button)
-        }
-    })
-
-    // Layout setup
-    productSection := container.NewVBox(
-        widget.NewLabel("Products"),
-        productList,
-    )
-
-    cartSection := container.NewVBox(
-        widget.NewLabel("Shopping Cart"),
-        cartDisplay,
-        totalLabel,
-        container.NewHBox(clearButton, checkoutButton),
-    )
-
-    // Main content split
-    split := container.NewHSplit(productSection, cartSection)
-    split.SetOffset(0.5)
-
-    // Main layout
-    content := container.NewBorder(header, nil, nil, nil, split)
-
-    return content
+// Helper function to create consistent menu buttons
+func createMenuButton(label string, icon fyne.Resource, action func()) *widget.Button {
+	btn := widget.NewButtonWithIcon(label, icon, action)
+	btn.Importance = widget.HighImportance
+	btn.Resize(fyne.NewSize(200, 80))
+	return btn
 }
