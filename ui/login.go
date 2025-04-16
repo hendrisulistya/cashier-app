@@ -1,0 +1,116 @@
+package ui
+
+import (
+	"image/color"
+
+	"fyne.io/fyne/v2"
+	"fyne.io/fyne/v2/canvas"
+	"fyne.io/fyne/v2/container"
+	"fyne.io/fyne/v2/theme"
+	"fyne.io/fyne/v2/widget"
+)
+
+type LoginPage struct {
+	window     fyne.Window
+	username   *widget.Entry
+	password   *widget.Entry
+	onLogin    func(username, password string) bool
+}
+
+func NewLoginPage(window fyne.Window, loginCallback func(username, password string) bool) *LoginPage {
+	return &LoginPage{
+		window:  window,
+		onLogin: loginCallback,
+	}
+}
+
+func (l *LoginPage) Load() fyne.CanvasObject {
+	// Logo
+	logo := canvas.NewImageFromFile("assets/logo.svg")
+	logo.SetMinSize(fyne.NewSize(200, 60))
+	logo.FillMode = canvas.ImageFillOriginal
+	logo.Resize(fyne.NewSize(200, 60))
+
+	// Create a card-like container for the login form
+	formCard := canvas.NewRectangle(theme.BackgroundColor())
+	formCard.SetMinSize(fyne.NewSize(300, 400))
+	
+	// Welcome text
+	welcomeText := canvas.NewText("Welcome back!", theme.ForegroundColor())
+	welcomeText.TextSize = 20
+	welcomeText.TextStyle.Bold = true
+	
+	// Login Form
+	l.username = widget.NewEntry()
+	l.username.SetPlaceHolder("Username")
+	l.username.Resize(fyne.NewSize(200, 40))
+	
+	l.password = widget.NewPasswordEntry()
+	l.password.SetPlaceHolder("Password")
+	l.password.Resize(fyne.NewSize(200, 40))
+
+	// Style the login button
+	loginBtn := widget.NewButton("Login", func() {
+		if l.onLogin(l.username.Text, l.password.Text) {
+			l.username.SetText("")
+			l.password.SetText("")
+		} else {
+			// Error message with dark text for visibility
+			errorText := canvas.NewText("Invalid username or password", color.NRGBA{R: 200, G: 30, B: 30, A: 255})
+			errorText.TextStyle.Bold = true
+			
+			content := container.NewCenter(
+				container.NewVBox(
+					logo,
+					container.NewCenter(errorText),
+					l.createLoginForm(),
+				),
+			)
+			l.window.SetContent(content)
+		}
+	})
+	loginBtn.Importance = widget.HighImportance
+	loginBtn.Resize(fyne.NewSize(200, 40))
+
+	// Create a styled container for the form
+	formContainer := container.NewVBox(
+		container.NewCenter(logo),
+		widget.NewLabel(""), // Spacing
+		container.NewCenter(welcomeText),
+		widget.NewLabel(""), // Spacing
+		l.username,
+		widget.NewLabel(""), // Spacing
+		l.password,
+		widget.NewLabel(""), // Spacing
+		loginBtn,
+	)
+
+	// Create a card effect with padding and shadow
+	cardContainer := container.NewMax(
+		formCard,
+		container.NewPadded(formContainer),
+	)
+
+	// Main container with centered card
+	return container.NewCenter(
+		container.NewPadded(cardContainer),
+	)
+}
+
+func (l *LoginPage) createLoginForm() fyne.CanvasObject {
+	loginBtn := widget.NewButton("Login", func() {
+		if l.onLogin(l.username.Text, l.password.Text) {
+			l.username.SetText("")
+			l.password.SetText("")
+		}
+	})
+	loginBtn.Importance = widget.HighImportance
+
+	return container.NewVBox(
+		l.username,
+		widget.NewLabel(""), // Spacing
+		l.password,
+		widget.NewLabel(""), // Spacing
+		loginBtn,
+	)
+}
